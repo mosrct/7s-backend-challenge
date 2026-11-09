@@ -1,0 +1,40 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-8080}:8080" # REST
+      - "${GRPC_PORT:-9090}:9090" # gRPC
+    environment:
+      HTTP_ADDR: ":8080"
+      GRPC_ADDR: ":9090"
+      MONGO_URI: "mongodb://mongo:27017"
+      MONGO_DATABASE: "user_management"
+      # No default on purpose: the API refuses to start without a secret
+      # (copy .env.example to .env).
+      JWT_SECRET: "${JWT_SECRET:-}"
+      JWT_TTL: "${JWT_TTL:-1h}"
+      USER_COUNT_INTERVAL: "10s"
+      LOG_LEVEL: "info"
+      SWAGGER_ENABLED: "${SWAGGER_ENABLED:-true}"
+    # Give in-flight requests time to drain on `docker compose down`.
+    stop_grace_period: 20s
+
+volumes:
+  mongo-data:

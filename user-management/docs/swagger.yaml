@@ -1,0 +1,384 @@
+basePath: /
+definitions:
+  CreateUserRequest:
+    properties:
+      email:
+        example: alice@example.com
+        format: email
+        maxLength: 254
+        type: string
+      name:
+        example: Alice
+        maxLength: 100
+        minLength: 1
+        type: string
+      password:
+        example: s3cure-pass
+        maxLength: 72
+        minLength: 8
+        type: string
+    type: object
+  Error:
+    properties:
+      details:
+        additionalProperties:
+          type: string
+        type: object
+      error:
+        example: validation failed
+        type: string
+    type: object
+  Health:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  LoginRequest:
+    properties:
+      email:
+        example: alice@example.com
+        format: email
+        type: string
+      password:
+        example: s3cure-pass
+        type: string
+    type: object
+  LoginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      expires_at:
+        example: "2026-11-08T11:47:10Z"
+        type: string
+      expires_in:
+        example: 3599
+        type: integer
+      token_type:
+        example: Bearer
+        type: string
+      user:
+        $ref: '#/definitions/User'
+    type: object
+  UpdateUserRequest:
+    properties:
+      email:
+        example: alice.smith@example.com
+        format: email
+        type: string
+      name:
+        example: Alice Smith
+        maxLength: 100
+        minLength: 1
+        type: string
+    type: object
+  User:
+    properties:
+      created_at:
+        example: "2026-11-08T10:47:09.956Z"
+        type: string
+      email:
+        example: alice@example.com
+        type: string
+      id:
+        example: 6af0532d5b25c4c7a5e43caa
+        type: string
+      name:
+        example: Alice
+        type: string
+    type: object
+  UserList:
+    properties:
+      limit:
+        example: 50
+        type: integer
+      offset:
+        example: 0
+        type: integer
+      total:
+        example: 2
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/User'
+        type: array
+    type: object
+info:
+  contact: {}
+  description: |-
+    REST API for managing users (MongoDB + JWT/HS256).
+    To call protected endpoints: 1) POST /api/v1/auth/register, 2) POST /api/v1/auth/login, 3) click "Authorize" and enter `Bearer <access_token>`.
+  title: User Management API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 'Returns an HS256-signed access token. Use it as `Authorization:
+        Bearer <access_token>` (in Swagger UI: click "Authorize").'
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LoginResponse'
+        "400":
+          description: Missing email or password
+          schema:
+            $ref: '#/definitions/Error'
+        "401":
+          description: Invalid email or password
+          schema:
+            $ref: '#/definitions/Error'
+      summary: Log in and get a JWT
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 'Public sign-up. Email is trimmed, lower-cased and must be unique.
+        Password: 8 characters to 72 bytes.'
+      parameters:
+      - description: New account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              description: /api/v1/users/{id}
+              type: string
+          schema:
+            $ref: '#/definitions/User'
+        "400":
+          description: Validation failed or malformed JSON
+          schema:
+            $ref: '#/definitions/Error'
+        "409":
+          description: Email already in use
+          schema:
+            $ref: '#/definitions/Error'
+      summary: Register a new account
+      tags:
+      - auth
+  /api/v1/users:
+    get:
+      parameters:
+      - default: 0
+        description: Number of users to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      - default: 50
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UserList'
+        "400":
+          description: Invalid pagination
+          schema:
+            $ref: '#/definitions/Error'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/Error'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Same rules as registration, but requires authentication.
+      parameters:
+      - description: New user
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              description: /api/v1/users/{id}
+              type: string
+          schema:
+            $ref: '#/definitions/User'
+        "400":
+          description: Validation failed or malformed JSON
+          schema:
+            $ref: '#/definitions/Error'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/Error'
+        "409":
+          description: Email already in use
+          schema:
+            $ref: '#/definitions/Error'
+      security:
+      - BearerAuth: []
+      summary: Create a user
+      tags:
+      - users
+  /api/v1/users/{id}:
+    delete:
+      description: 'Only the account owner may delete it. Note: already-issued tokens
+        stay valid until they expire.'
+      parameters:
+      - description: User ID (must be your own)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/Error'
+        "403":
+          description: Not your account
+          schema:
+            $ref: '#/definitions/Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/Error'
+      security:
+      - BearerAuth: []
+      summary: Delete your own account
+      tags:
+      - users
+    get:
+      parameters:
+      - description: User ID (24-char hex)
+        example: 6af0532d5b25c4c7a5e43caa
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/User'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/Error'
+      security:
+      - BearerAuth: []
+      summary: Get a user by ID
+      tags:
+      - users
+    patch:
+      consumes:
+      - application/json
+      description: 'Partial update: send only the fields to change. Only the account
+        owner may update it (token `sub` must equal `id`).'
+      parameters:
+      - description: User ID (must be your own)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/User'
+        "400":
+          description: Validation failed, empty body or unknown field
+          schema:
+            $ref: '#/definitions/Error'
+        "401":
+          description: Missing or invalid token
+          schema:
+            $ref: '#/definitions/Error'
+        "403":
+          description: Not your account
+          schema:
+            $ref: '#/definitions/Error'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/Error'
+        "409":
+          description: Email already in use
+          schema:
+            $ref: '#/definitions/Error'
+      security:
+      - BearerAuth: []
+      summary: Update your own name and/or email
+      tags:
+      - users
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/Health'
+      summary: Liveness check
+      tags:
+      - health
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    description: 'Type "Bearer" followed by a space and the access_token from /api/v1/auth/login.
+      Example: Bearer eyJhbGciOi...'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
